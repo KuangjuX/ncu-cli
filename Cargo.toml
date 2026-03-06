@@ -1,0 +1,12 @@
+[package]
+name = "ncu-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CUDA kernel performance analyzer for NVIDIA Nsight Compute CSV exports"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+anyhow = "1"
+comfy-table = "7"
+colored = "2"
