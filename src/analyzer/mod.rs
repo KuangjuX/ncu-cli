@@ -1,8 +1,10 @@
 pub mod arch;
 pub mod instruction;
+pub mod launch_config;
 pub mod memory;
 pub mod occupancy;
 pub mod roofline;
+pub mod warp_stall;
 
 use crate::metrics::KernelData;
 use crate::severity::Finding;
@@ -21,6 +23,8 @@ pub fn all_analyzers() -> Vec<Box<dyn Analyzer>> {
         Box::new(memory::MemoryAnalyzer),
         Box::new(occupancy::OccupancyAnalyzer),
         Box::new(instruction::InstructionAnalyzer),
+        Box::new(warp_stall::WarpStallAnalyzer),
+        Box::new(launch_config::LaunchConfigAnalyzer),
         Box::new(arch::ArchAnalyzer),
     ]
 }
