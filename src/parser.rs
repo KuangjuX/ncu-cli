@@ -70,11 +70,50 @@ fn build_kernel_data(map: &HashMap<String, String>) -> Result<KernelData> {
         l1_requests_global_ld: get_f64(map, metrics::L1_REQUESTS_GLOBAL_LD),
         l1_hit_rate_pct: get_f64(map, metrics::L1_HIT_RATE),
         l2_hit_rate_pct: get_f64(map, metrics::L2_HIT_RATE),
+        l1_sectors_global_st: get_f64(map, metrics::L1_SECTORS_GLOBAL_ST),
+        l1_requests_global_st: get_f64(map, metrics::L1_REQUESTS_GLOBAL_ST),
+
+        shared_mem_bank_conflicts: get_f64(map, metrics::SHMEM_BANK_CONFLICTS),
 
         local_mem_store_sectors: get_f64(map, metrics::LOCAL_MEM_STORE_SECTORS),
         warps_active_pct: get_f64(map, metrics::WARPS_ACTIVE_PCT),
 
+        registers_per_thread: get_f64(map, metrics::REGISTERS_PER_THREAD),
+        shared_mem_per_block_kb: get_f64(map, metrics::SHARED_MEM_PER_BLOCK),
+        occupancy_limit_registers: get_f64(map, metrics::OCCUPANCY_LIMIT_REGISTERS),
+        occupancy_limit_shared_mem: get_f64(map, metrics::OCCUPANCY_LIMIT_SHARED_MEM),
+        occupancy_limit_warps: get_f64(map, metrics::OCCUPANCY_LIMIT_WARPS),
+        occupancy_limit_blocks: get_f64(map, metrics::OCCUPANCY_LIMIT_BLOCKS),
+        theoretical_occupancy_pct: get_f64(map, metrics::THEORETICAL_OCCUPANCY_PCT),
+
+        dram_read_gbytes: get_f64(map, metrics::DRAM_BYTES_READ),
+        dram_write_gbytes: get_f64(map, metrics::DRAM_BYTES_WRITE),
+        dram_throughput_pct: get_f64(map, metrics::DRAM_THROUGHPUT_PCT),
+
         tensor_core_hmma_pct: get_f64(map, metrics::TENSOR_HMMA_PCT),
+
+        pipe_fma_pct: get_f64(map, metrics::PIPE_FMA_PCT),
+        pipe_alu_pct: get_f64(map, metrics::PIPE_ALU_PCT),
+        pipe_lsu_pct: get_f64(map, metrics::PIPE_LSU_PCT),
+        pipe_tensor_pct: get_f64(map, metrics::PIPE_TENSOR_PCT),
+        pipe_fma_fp16_pct: get_f64(map, metrics::PIPE_FMA_FP16_PCT),
+
+        avg_thread_executed: get_f64(map, metrics::AVG_THREAD_EXECUTED),
+        avg_thread_executed_true: get_f64(map, metrics::AVG_THREAD_EXECUTED_TRUE),
+
+        warps_eligible_per_cycle: get_f64(map, metrics::WARPS_ELIGIBLE_PER_CYCLE),
+
+        stall_long_scoreboard: get_f64(map, metrics::STALL_LONG_SCOREBOARD),
+        stall_short_scoreboard: get_f64(map, metrics::STALL_SHORT_SCOREBOARD),
+        stall_wait: get_f64(map, metrics::STALL_WAIT),
+        stall_sleeping: get_f64(map, metrics::STALL_SLEEPING),
+        stall_barrier: get_f64(map, metrics::STALL_BARRIER),
+        stall_mio_throttle: get_f64(map, metrics::STALL_MIO_THROTTLE),
+        stall_lg_throttle: get_f64(map, metrics::STALL_LG_THROTTLE),
+        stall_math_pipe_throttle: get_f64(map, metrics::STALL_MATH_PIPE_THROTTLE),
+        stall_drain: get_f64(map, metrics::STALL_DRAIN),
+        stall_not_selected: get_f64(map, metrics::STALL_NOT_SELECTED),
+        stall_selected: get_f64(map, metrics::STALL_SELECTED),
 
         arch_sm: parse_arch_sm(get_f64(map, metrics::DEVICE_ARCH) as u32),
 
