@@ -59,6 +59,7 @@ impl Analyzer for RooflineAnalyzer {
     }
 
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
+        let mut findings = Vec::new();
         let bottleneck = classify(data);
         let compute = data.sm_throughput_pct;
         let memory = data.mem_throughput_pct;
@@ -75,17 +76,31 @@ impl Analyzer for RooflineAnalyzer {
                     .into(),
                 source: String::new(),
             },
-            Bottleneck::MemoryBound => Finding {
-                severity: Severity::Warning,
-                title: "Memory Bound".into(),
-                detail: format!(
-                    "Memory throughput ({memory:.1}%) significantly exceeds SM throughput ({compute:.1}%)."
-                ),
-                action: "Check memory access patterns, improve L2 cache hit rate, \
-                         and consider data layout optimizations."
-                    .into(),
-                source: String::new(),
-            },
+            Bottleneck::MemoryBound => {
+                let sub_bottleneck = classify_memory_sublevel(data);
+                Finding {
+                    severity: Severity::Warning,
+                    title: format!("Memory Bound ({})", sub_bottleneck),
+                    detail: format!(
+                        "Memory throughput ({memory:.1}%) significantly exceeds SM throughput ({compute:.1}%). \
+                         Sub-classification: {sub_bottleneck}. \
+                         L1 hit: {:.1}%, L2 hit: {:.1}%, DRAM throughput: {:.1}%.",
+                        data.l1_hit_rate_pct, data.l2_hit_rate_pct, data.dram_throughput_pct
+                    ),
+                    action: match sub_bottleneck {
+                        MemorySubLevel::DramBound => "DRAM bandwidth is the bottleneck. Reduce data movement via \
+                                 mixed precision, compression, or algorithmic changes to improve arithmetic intensity. \
+                                 Use L2 persistence hints (cudaAccessPolicyWindow) to cache hot data.".into(),
+                        MemorySubLevel::L2Bound => "L2 cache misses are driving traffic to DRAM. Improve data reuse \
+                                 with tiling, restructure access patterns for temporal locality, \
+                                 or use L2 persistence policies on Ampere+.".into(),
+                        MemorySubLevel::L1Bound => "L1 cache is the bottleneck. Use shared memory for frequently \
+                                 accessed data, apply tiling strategies, or improve spatial locality \
+                                 of global memory accesses.".into(),
+                    },
+                    source: String::new(),
+                }
+            }
             Bottleneck::Balanced => Finding {
                 severity: Severity::Info,
                 title: "Balanced Utilization".into(),
@@ -109,7 +124,62 @@ impl Analyzer for RooflineAnalyzer {
             },
         };
 
-        vec![finding]
+        findings.push(finding);
+
+        if data.dram_throughput_pct > 0.0 {
+            findings.push(Finding {
+                severity: Severity::Info,
+                title: format!("DRAM Throughput: {:.1}%", data.dram_throughput_pct),
+                detail: format!(
+                    "DRAM bandwidth utilization: {:.1}% of peak. \
+                     Read: {:.2} GB, Write: {:.2} GB.",
+                    data.dram_throughput_pct, data.dram_read_gbytes, data.dram_write_gbytes
+                ),
+                action: String::new(),
+                source: String::new(),
+            });
+        }
+
+        findings
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum MemorySubLevel {
+    DramBound,
+    L2Bound,
+    L1Bound,
+}
+
+impl std::fmt::Display for MemorySubLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemorySubLevel::DramBound => write!(f, "DRAM-Bound"),
+            MemorySubLevel::L2Bound => write!(f, "L2-Bound"),
+            MemorySubLevel::L1Bound => write!(f, "L1-Bound"),
+        }
+    }
+}
+
+fn classify_memory_sublevel(data: &KernelData) -> MemorySubLevel {
+    if data.dram_throughput_pct > 70.0 {
+        return MemorySubLevel::DramBound;
+    }
+    if data.l2_hit_rate_pct < 50.0 && data.dram_throughput_pct > 40.0 {
+        return MemorySubLevel::DramBound;
+    }
+    if data.l1_hit_rate_pct < 20.0 && data.l2_hit_rate_pct >= 50.0 {
+        return MemorySubLevel::L2Bound;
+    }
+    if data.l1_hit_rate_pct < 20.0 {
+        return MemorySubLevel::L1Bound;
+    }
+    // Default: if DRAM throughput is significant, it's DRAM-bound
+    if data.dram_throughput_pct > 30.0 {
+        MemorySubLevel::DramBound
+    } else {
+        MemorySubLevel::L2Bound
     }
 }
 
@@ -131,9 +201,41 @@ mod tests {
             l1_requests_global_ld: 0.0,
             l1_hit_rate_pct: 50.0,
             l2_hit_rate_pct: 70.0,
+            l1_sectors_global_st: 0.0,
+            l1_requests_global_st: 0.0,
+            shared_mem_bank_conflicts: 0.0,
             local_mem_store_sectors: 0.0,
             warps_active_pct: 60.0,
+            registers_per_thread: 32.0,
+            shared_mem_per_block_kb: 0.0,
+            occupancy_limit_registers: 8.0,
+            occupancy_limit_shared_mem: 32.0,
+            occupancy_limit_warps: 8.0,
+            occupancy_limit_blocks: 32.0,
+            theoretical_occupancy_pct: 100.0,
+            dram_read_gbytes: 0.0,
+            dram_write_gbytes: 0.0,
+            dram_throughput_pct: 0.0,
             tensor_core_hmma_pct: 0.0,
+            pipe_fma_pct: 0.0,
+            pipe_alu_pct: 0.0,
+            pipe_lsu_pct: 0.0,
+            pipe_tensor_pct: 0.0,
+            pipe_fma_fp16_pct: 0.0,
+            avg_thread_executed: 0.0,
+            avg_thread_executed_true: 0.0,
+            warps_eligible_per_cycle: 2.0,
+            stall_long_scoreboard: 0.0,
+            stall_short_scoreboard: 0.0,
+            stall_wait: 0.0,
+            stall_sleeping: 0.0,
+            stall_barrier: 0.0,
+            stall_mio_throttle: 0.0,
+            stall_lg_throttle: 0.0,
+            stall_math_pipe_throttle: 0.0,
+            stall_drain: 0.0,
+            stall_not_selected: 0.0,
+            stall_selected: 0.0,
             arch_sm: 90,
             tma_cycles_active_pct: 0.0,
             lsu_pipe_utilization_pct: 0.0,
@@ -165,10 +267,36 @@ mod tests {
     }
 
     #[test]
-    fn test_analyzer_returns_one_finding() {
-        let data = make_data(27.0, 85.0);
+    fn test_memory_bound_has_sublevel() {
+        let mut data = make_data(27.0, 85.0);
+        data.dram_throughput_pct = 85.0;
         let findings = RooflineAnalyzer.analyze(&data);
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(findings
+            .iter()
+            .any(|f| f.title.contains("Memory Bound") && f.title.contains("DRAM")));
+    }
+
+    #[test]
+    fn test_dram_throughput_info_reported() {
+        let mut data = make_data(27.0, 85.0);
+        data.dram_throughput_pct = 85.0;
+        data.dram_read_gbytes = 1.07;
+        data.dram_write_gbytes = 1.05;
+        let findings = RooflineAnalyzer.analyze(&data);
+        assert!(findings
+            .iter()
+            .any(|f| f.title.contains("DRAM Throughput")));
+    }
+
+    #[test]
+    fn test_memory_sublevel_l2_bound() {
+        let mut data = make_data(27.0, 85.0);
+        data.l1_hit_rate_pct = 10.0;
+        data.l2_hit_rate_pct = 60.0;
+        data.dram_throughput_pct = 30.0;
+        let findings = RooflineAnalyzer.analyze(&data);
+        assert!(findings
+            .iter()
+            .any(|f| f.title.contains("L2-Bound")));
     }
 }
