@@ -1,22 +1,24 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::metrics::{self, KernelData};
 
-/// Parse an NCU CSV export (vertical key-value format) into `KernelData`.
+/// Parse an NCU CSV export into one or more `KernelData` entries.
 ///
-/// The file has rows of `metric_name,value` — not a traditional columnar CSV.
-/// Lines prefixed with `breakdown:` are sub-metric enumerations and are skipped.
-pub fn parse_ncu_csv(path: &Path) -> Result<KernelData> {
+/// NCU CSV is a vertical key-value format (`metric_name,value`).
+/// When multiple kernels are profiled, the same keys repeat — each time
+/// `"Function Name"` appears, it starts a new kernel page.
+pub fn parse_ncu_csv(path: &Path) -> Result<Vec<KernelData>> {
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
         .from_path(path)
         .with_context(|| format!("Failed to open CSV file: {}", path.display()))?;
 
-    let mut map: HashMap<String, String> = HashMap::new();
+    let mut pages: Vec<HashMap<String, String>> = Vec::new();
+    let mut current: HashMap<String, String> = HashMap::new();
 
     for result in reader.records() {
         let record = result.with_context(|| "Failed to read CSV record")?;
@@ -28,10 +30,29 @@ pub fn parse_ncu_csv(path: &Path) -> Result<KernelData> {
             continue;
         }
         let value = record[1].trim().to_string();
-        map.insert(key, value);
+
+        if key == metrics::FUNCTION_NAME && current.contains_key(metrics::FUNCTION_NAME) {
+            pages.push(std::mem::take(&mut current));
+        }
+        current.insert(key, value);
     }
 
-    build_kernel_data(&map)
+    if !current.is_empty() {
+        pages.push(current);
+    }
+
+    if pages.is_empty() {
+        bail!("No kernel data found in CSV file: {}", path.display());
+    }
+
+    pages
+        .iter()
+        .enumerate()
+        .map(|(i, map)| {
+            build_kernel_data(map)
+                .with_context(|| format!("Failed to parse kernel #{} from CSV", i + 1))
+        })
+        .collect()
 }
 
 fn build_kernel_data(map: &HashMap<String, String>) -> Result<KernelData> {
@@ -89,13 +110,6 @@ fn parse_arch_sm(raw: u32) -> u32 {
     if raw == 0 {
         return 0;
     }
-    // raw / 4 gives e.g. 96 for Hopper (SM 9.0 encoded as 96 = 9*10 + 6?)
-    // Actually NCU uses compute_capability_major * 10 + minor directly in some exports,
-    // but the `device__attribute_architecture` field uses a different encoding.
-    // For the sample: 384 -> Hopper H800 -> SM 90.
-    // Known mapping: Ampere=800->80, 860->86; Hopper=900->90; Blackwell=1000->100
-    // The raw value 384 doesn't follow a simple formula — NCU internal enum.
-    // We use a lookup table for known architectures.
     match raw {
         800 | 80 => 80,
         860 | 86 => 86,
@@ -105,7 +119,6 @@ fn parse_arch_sm(raw: u32) -> u32 {
         // NCU internal architecture IDs (observed in practice)
         384 => 90, // H800/H100 Hopper
         _ => {
-            // Fallback heuristic: if > 200, try raw/10; otherwise use as-is
             if raw > 200 {
                 raw / 10
             } else {
