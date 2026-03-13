@@ -20,7 +20,6 @@ impl Analyzer for OccupancyAnalyzer {
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let mut findings = Vec::new();
 
-        // --- Register spill detection (local memory store) ---
         if data.local_mem_store_sectors > 0.0 {
             findings.push(Finding {
                 severity: Severity::Critical,
@@ -37,21 +36,62 @@ impl Analyzer for OccupancyAnalyzer {
             });
         }
 
-        // --- Low occupancy ---
         if data.warps_active_pct < 50.0 {
+            let (limiter, limit_val) = data.occupancy_limiter();
+            let limiter_detail = if limit_val > 0.0 {
+                format!(
+                    " Primary limiter: {} ({:.0} blocks/SM). \
+                     Registers/thread: {:.0}, Shared mem/block: {:.1} KB.",
+                    limiter, limit_val, data.registers_per_thread, data.shared_mem_per_block_kb
+                )
+            } else {
+                String::new()
+            };
+
             findings.push(Finding {
                 severity: Severity::Warning,
                 title: "Low Occupancy".into(),
                 detail: format!(
                     "Active warps at {:.1}% of peak (threshold: 50%). \
-                     SM resources may be underutilized.",
-                    data.warps_active_pct
+                     SM resources may be underutilized.{}",
+                    data.warps_active_pct, limiter_detail
                 ),
-                action: "Reduce per-thread register count or shared memory usage to allow more \
-                         concurrent warps. Consider adjusting block size."
-                    .into(),
+                action: match limiter {
+                    "Registers" => "Reduce register usage with __launch_bounds__ or simplify per-thread logic. \
+                                    Consider trading registers for shared memory."
+                        .into(),
+                    "Shared Memory" => "Reduce shared memory per block, use dynamic sizing, \
+                                        or split into smaller tile sizes."
+                        .into(),
+                    "Warps" => "Reduce block size to allow more concurrent blocks per SM.".into(),
+                    _ => "Reduce per-thread register count or shared memory usage to allow more \
+                          concurrent warps. Consider adjusting block size."
+                        .into(),
+                },
                 source: String::new(),
             });
+        }
+
+        if data.theoretical_occupancy_pct > 0.0 && data.warps_active_pct > 0.0 {
+            let ratio = data.warps_active_pct / data.theoretical_occupancy_pct;
+            if ratio < 0.5 && data.theoretical_occupancy_pct > 10.0 {
+                findings.push(Finding {
+                    severity: Severity::Warning,
+                    title: "Large Theoretical-Achieved Occupancy Gap".into(),
+                    detail: format!(
+                        "Theoretical occupancy: {:.1}%, achieved: {:.1}% ({:.0}% of theoretical). \
+                         Significant runtime inefficiency is preventing warps from staying active.",
+                        data.theoretical_occupancy_pct,
+                        data.warps_active_pct,
+                        ratio * 100.0
+                    ),
+                    action: "Investigate workload imbalance, excessive synchronization, \
+                             or tail effects from grid size. Use CUDA occupancy calculator \
+                             to verify theoretical limits."
+                        .into(),
+                    source: String::new(),
+                });
+            }
         }
 
         findings
@@ -77,9 +117,41 @@ mod tests {
             l1_requests_global_ld: 0.0,
             l1_hit_rate_pct: 50.0,
             l2_hit_rate_pct: 70.0,
+            l1_sectors_global_st: 0.0,
+            l1_requests_global_st: 0.0,
+            shared_mem_bank_conflicts: 0.0,
             local_mem_store_sectors: local_sectors,
             warps_active_pct: warps_pct,
+            registers_per_thread: 32.0,
+            shared_mem_per_block_kb: 0.0,
+            occupancy_limit_registers: 8.0,
+            occupancy_limit_shared_mem: 32.0,
+            occupancy_limit_warps: 8.0,
+            occupancy_limit_blocks: 32.0,
+            theoretical_occupancy_pct: 100.0,
+            dram_read_gbytes: 0.0,
+            dram_write_gbytes: 0.0,
+            dram_throughput_pct: 0.0,
             tensor_core_hmma_pct: 0.0,
+            pipe_fma_pct: 0.0,
+            pipe_alu_pct: 0.0,
+            pipe_lsu_pct: 0.0,
+            pipe_tensor_pct: 0.0,
+            pipe_fma_fp16_pct: 0.0,
+            avg_thread_executed: 0.0,
+            avg_thread_executed_true: 0.0,
+            warps_eligible_per_cycle: 2.0,
+            stall_long_scoreboard: 0.0,
+            stall_short_scoreboard: 0.0,
+            stall_wait: 0.0,
+            stall_sleeping: 0.0,
+            stall_barrier: 0.0,
+            stall_mio_throttle: 0.0,
+            stall_lg_throttle: 0.0,
+            stall_math_pipe_throttle: 0.0,
+            stall_drain: 0.0,
+            stall_not_selected: 0.0,
+            stall_selected: 0.0,
             arch_sm: 90,
             tma_cycles_active_pct: 0.0,
             lsu_pipe_utilization_pct: 0.0,
