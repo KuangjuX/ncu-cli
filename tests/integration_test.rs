@@ -24,6 +24,11 @@ fn test_legacy_input_flag_runs_successfully() {
     assert!(stdout.contains("Memory Bound"), "missing bottleneck classification");
     assert!(stdout.contains("Metrics Overview"), "missing metrics table");
     assert!(stdout.contains("Analysis & Suggestions"), "missing findings section");
+
+    assert!(stdout.contains("DRAM Throughput"), "missing DRAM throughput row");
+    assert!(stdout.contains("Registers / Thread"), "missing registers row");
+    assert!(stdout.contains("Bank Conflicts"), "missing bank conflicts row");
+    assert!(stdout.contains("Eligible Warps"), "missing eligible warps row");
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +169,8 @@ fn test_skill_list() {
     assert!(stdout.contains("memory"));
     assert!(stdout.contains("occupancy"));
     assert!(stdout.contains("instruction"));
+    assert!(stdout.contains("warp_stall"));
+    assert!(stdout.contains("launch_config"));
     assert!(stdout.contains("arch"));
 }
 
@@ -177,6 +184,26 @@ fn test_skill_run_roofline() {
     assert!(output.status.success(), "skill run roofline failed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Memory Bound") || stdout.contains("Compute Bound"));
+}
+
+#[test]
+fn test_skill_run_warp_stall() {
+    let output = cli_binary()
+        .args(["skill", "run", "warp_stall", "exp_cute_csnippets.csv"])
+        .output()
+        .expect("failed to execute ncu-cli");
+
+    assert!(output.status.success(), "skill run warp_stall failed");
+}
+
+#[test]
+fn test_skill_run_launch_config() {
+    let output = cli_binary()
+        .args(["skill", "run", "launch_config", "exp_cute_csnippets.csv"])
+        .output()
+        .expect("failed to execute ncu-cli");
+
+    assert!(output.status.success(), "skill run launch_config failed");
 }
 
 #[test]
@@ -251,6 +278,60 @@ fn test_export_csv() {
     assert!(output.status.success(), "export csv failed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("kernel_name,"));
+}
+
+// ---------------------------------------------------------------------------
+// Enhanced analysis verification
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_analyze_shows_stall_reasons() {
+    let output = cli_binary()
+        .args(["analyze", "exp_cute_csnippets.csv"])
+        .output()
+        .expect("failed to execute ncu-cli");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Top Warp Stall Reasons") || stdout.contains("Stall:"),
+        "should show warp stall analysis"
+    );
+}
+
+#[test]
+fn test_analyze_shows_optimization_priorities() {
+    let output = cli_binary()
+        .args(["analyze", "exp_cute_csnippets.csv"])
+        .output()
+        .expect("failed to execute ncu-cli");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Optimization Priorities"),
+        "should show optimization priority ranking"
+    );
+}
+
+#[test]
+fn test_analyze_json_has_new_fields() {
+    let output = cli_binary()
+        .args(["analyze", "exp_cute_csnippets.csv", "--format", "json"])
+        .output()
+        .expect("failed to execute ncu-cli");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .expect("output should be valid JSON");
+
+    let kernel = &parsed["kernel"];
+    assert!(kernel["registers_per_thread"].as_f64().is_some());
+    assert!(kernel["dram_throughput_pct"].as_f64().is_some());
+    assert!(kernel["stall_long_scoreboard"].as_f64().is_some());
+    assert!(kernel["shared_mem_bank_conflicts"].as_f64().is_some());
+    assert!(kernel["warps_eligible_per_cycle"].as_f64().is_some());
 }
 
 // ---------------------------------------------------------------------------
