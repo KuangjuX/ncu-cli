@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use colored::Colorize;
 use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Table};
 
@@ -6,17 +8,24 @@ use crate::analyzer::roofline;
 use crate::metrics::KernelData;
 use crate::severity::{Finding, Severity};
 
+#[allow(dead_code)]
 pub fn print_report(data: &KernelData, findings: &[Finding]) {
-    println!();
-    print_header(data);
-    println!();
-    print_metrics_table(data);
-    println!();
-    print_findings(findings);
-    println!();
+    let mut stdout = std::io::stdout().lock();
+    let _ = write_report(&mut stdout, data, findings);
 }
 
-fn print_header(data: &KernelData) {
+pub fn write_report(w: &mut dyn Write, data: &KernelData, findings: &[Finding]) -> anyhow::Result<()> {
+    writeln!(w)?;
+    write_header(w, data)?;
+    writeln!(w)?;
+    write_metrics_table(w, data)?;
+    writeln!(w)?;
+    write_findings(w, findings)?;
+    writeln!(w)?;
+    Ok(())
+}
+
+fn write_header(w: &mut dyn Write, data: &KernelData) -> anyhow::Result<()> {
     let bottleneck = roofline::classify(data);
     let arch_name = arch_display_name(data.arch_sm);
     let sm_label = if data.arch_sm > 0 {
@@ -25,29 +34,23 @@ fn print_header(data: &KernelData) {
         "Unknown".into()
     };
 
-    println!("{}", "═".repeat(72).dimmed());
-    println!(
-        "  {} {}",
-        "Kernel:".bold(),
-        truncate_name(&data.kernel_name, 58)
-    );
-    println!("  {}  {}", "Arch:".bold(), sm_label);
-    println!("  {} {}", "Device:".bold(), data.device_name);
-    println!(
-        "  {} {:.2} us",
-        "Duration:".bold(),
-        data.duration_us
-    );
-    println!(
+    writeln!(w, "{}", "═".repeat(72).dimmed())?;
+    writeln!(w, "  {} {}", "Kernel:".bold(), truncate_name(&data.kernel_name, 58))?;
+    writeln!(w, "  {}  {}", "Arch:".bold(), sm_label)?;
+    writeln!(w, "  {} {}", "Device:".bold(), data.device_name)?;
+    writeln!(w, "  {} {:.2} us", "Duration:".bold(), data.duration_us)?;
+    writeln!(
+        w,
         "  {} {}",
         "Main Bottleneck:".bold(),
         format!("{bottleneck}").yellow().bold()
-    );
-    println!("{}", "═".repeat(72).dimmed());
+    )?;
+    writeln!(w, "{}", "═".repeat(72).dimmed())?;
+    Ok(())
 }
 
-fn print_metrics_table(data: &KernelData) {
-    println!("  {}", "[Metrics Overview]".bold());
+fn write_metrics_table(w: &mut dyn Write, data: &KernelData) -> anyhow::Result<()> {
+    writeln!(w, "  {}", "[Metrics Overview]".bold())?;
 
     let mut table = Table::new();
     table
@@ -105,19 +108,19 @@ fn print_metrics_table(data: &KernelData) {
         Cell::new("--"),
     ]);
 
-    // Indent each line of the table
     for line in table.to_string().lines() {
-        println!("  {line}");
+        writeln!(w, "  {line}")?;
     }
+    Ok(())
 }
 
-fn print_findings(findings: &[Finding]) {
-    println!("  {}", "[Analysis & Suggestions]".bold());
-    println!();
+fn write_findings(w: &mut dyn Write, findings: &[Finding]) -> anyhow::Result<()> {
+    writeln!(w, "  {}", "[Analysis & Suggestions]".bold())?;
+    writeln!(w)?;
 
     if findings.is_empty() {
-        println!("  No issues detected.");
-        return;
+        writeln!(w, "  No issues detected.")?;
+        return Ok(());
     }
 
     for (i, f) in findings.iter().enumerate() {
@@ -132,11 +135,12 @@ fn print_findings(findings: &[Finding]) {
                 .bold()
                 .to_string(),
         };
-        println!("  {num}. {title}");
-        println!("     Detail: {}", f.detail);
-        println!("     Action: {}", f.action);
-        println!();
+        writeln!(w, "  {num}. {title}")?;
+        writeln!(w, "     Detail: {}", f.detail)?;
+        writeln!(w, "     Action: {}", f.action)?;
+        writeln!(w)?;
     }
+    Ok(())
 }
 
 fn level_indicator(value: f64, good: f64, bad: f64) -> &'static str {
