@@ -9,6 +9,14 @@ impl Analyzer for MemoryAnalyzer {
         "Memory Hierarchy Analysis"
     }
 
+    fn description(&self) -> &str {
+        "Detects uncoalesced global memory access and low L1/L2 cache hit rates"
+    }
+
+    fn category(&self) -> &str {
+        "memory"
+    }
+
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let mut findings = Vec::new();
 

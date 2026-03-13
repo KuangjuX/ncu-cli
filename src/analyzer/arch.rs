@@ -36,6 +36,14 @@ impl Analyzer for ArchAnalyzer {
         "Architecture-Specific Analysis"
     }
 
+    fn description(&self) -> &str {
+        "Tailored advice for Ampere (cp.async), Hopper (TMA), and Blackwell (FP4/FP6) architectures"
+    }
+
+    fn category(&self) -> &str {
+        "arch"
+    }
+
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let mut findings = Vec::new();
         let family = arch_family(data.arch_sm);

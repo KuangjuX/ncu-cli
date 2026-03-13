@@ -9,6 +9,14 @@ impl Analyzer for OccupancyAnalyzer {
         "Occupancy & Register Spill Analysis"
     }
 
+    fn description(&self) -> &str {
+        "Flags register spills to local memory and low warp occupancy"
+    }
+
+    fn category(&self) -> &str {
+        "occupancy"
+    }
+
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let mut findings = Vec::new();
 

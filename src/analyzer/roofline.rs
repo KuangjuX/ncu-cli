@@ -50,6 +50,14 @@ impl Analyzer for RooflineAnalyzer {
         "Roofline Analysis"
     }
 
+    fn description(&self) -> &str {
+        "Classifies kernel as Compute Bound, Memory Bound, Balanced, or Latency Bound based on SM and memory throughput"
+    }
+
+    fn category(&self) -> &str {
+        "roofline"
+    }
+
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let bottleneck = classify(data);
         let compute = data.sm_throughput_pct;

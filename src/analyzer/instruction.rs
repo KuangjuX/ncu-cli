@@ -9,6 +9,14 @@ impl Analyzer for InstructionAnalyzer {
         "Instruction Execution Analysis"
     }
 
+    fn description(&self) -> &str {
+        "Identifies FP16 kernels with low Tensor Core (HMMA) utilization"
+    }
+
+    fn category(&self) -> &str {
+        "instruction"
+    }
+
     fn analyze(&self, data: &KernelData) -> Vec<Finding> {
         let mut findings = Vec::new();
 
