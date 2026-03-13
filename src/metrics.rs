@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 // NCU metric key constants — these match the CSV key column exactly (without unit suffixes).
 
 pub const FUNCTION_NAME: &str = "Function Name";
@@ -41,7 +43,7 @@ pub const LSU_PIPE_UTILIZATION: &str =
     "smsp__inst_executed_pipe_lsu.avg.pct_of_peak_sustained_elapsed";
 
 /// Parsed kernel profiling data extracted from an NCU CSV export.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct KernelData {
     pub kernel_name: String,
     pub device_name: String,

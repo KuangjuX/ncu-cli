@@ -1,8 +1,9 @@
 use std::fmt;
 
 use colored::Colorize;
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Severity {
     Info,
     Warning,
@@ -20,7 +21,18 @@ impl fmt::Display for Severity {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Plain-text severity label (no ANSI colors), for JSON/markdown output.
+impl Severity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Info => "INFO",
+            Severity::Warning => "WARNING",
+            Severity::Critical => "CRITICAL",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Finding {
     pub severity: Severity,
     pub title: String,
@@ -29,4 +41,3 @@ pub struct Finding {
     /// Which analyzer produced this finding (populated by the pipeline).
     pub source: String,
 }
-
