@@ -148,10 +148,31 @@ The report shows:
 - **Top improvements** — kernels that got faster
 - **New / removed kernels** — workload changes across runs
 
-## Build
+## Installation
+
+### One-line install (Linux / macOS)
+
+Requires `git` and `cargo` (Rust toolchain). The script clones the repo, compiles in release mode, and installs the binary to `/usr/local/bin`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KuangjuX/ncu-cli/main/install.sh | bash
+```
+
+**Options:**
+
+```bash
+# Install a specific version (git tag)
+VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/KuangjuX/ncu-cli/main/install.sh | bash
+
+# Install to a custom directory
+INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/KuangjuX/ncu-cli/main/install.sh | bash
+```
+
+### Build from source manually
 
 ```bash
 cargo build --release
+cp target/release/ncu-cli /usr/local/bin/
 ```
 
 ## Test
